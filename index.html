@@ -1,0 +1,454 @@
+<html>
+<head>
+<meta charset='utf-8'> <title>D3 Copy Number</title>
+<script src='js/jquery-1.10.2.min.js' type='text/javascript'></script>
+<script src='js/bootstrap.min.js' type='text/javascript'></script>
+<link href='css/bootstrap.css' rel='stylesheet' type='text/css'>   
+<script src="js/d3.js"></script> 
+<script src="js/d3.tip.js"></script>
+<style>
+.axis path,
+.axis line {
+    fill: none;
+    stroke: black;
+    shape-rendering: crispEdges;
+}
+
+.axis text {
+    font-family: sans-serif;
+    font-size: 11px;
+}
+
+.x.axis line {
+  stroke: #777;
+  stroke-dasharray: 2,2;
+}
+.x.axis{
+        color:"#fff";
+    }
+ .x.axis text{
+        visibility:hidden;
+    }   
+.y.axis line {
+  stroke: rgba(193, 191, 191, 0.48);
+  stroke-dasharray: 2,2;
+}
+.y.axis{
+        color:"#fff";
+    }
+.brush .extent {
+  stroke: #fff;
+  fill-opacity: .125;
+  shape-rendering: crispEdges;
+}
+    
+    path {
+  fill: steelblue;
+}
+.brush .extent {
+  fill-opacity: .1;
+  stroke: #fff;
+  shape-rendering: crispEdges;
+}
+#CNplot-container{
+        background-color: #fff; 
+        margin-top:50px; 
+        width:auto;
+        padding-left:50px;
+        padding-right:50px;
+}
+ #copy-number-title {
+    height:40px;
+    display:block;
+    border:1px;
+    border-color:#f00;   
+    }
+    
+    /* Creates a small triangle extender for the tooltip */
+.d3-tip:after {
+  box-sizing: border-box;
+  display: inline;
+  font-size: 10px;
+  width: 100%;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.8);
+  content: "\25BC";
+  position: absolute;
+  text-align: center;
+}
+
+/* Style northward tooltips differently */
+.d3-tip.n:after {
+  margin: -1px 0 0 0;
+  top: 100%;
+  left: 0;
+}
+
+    
+.d3-tip {
+  line-height: 1;
+  font-weight: bold;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border-radius: 2px;
+}
+</style>
+</head>
+<body>
+<div class="container container-fluid" id="CNplot-container">
+    <h3 id="copy-number-title">Copy Number Plot for M-1648 Tumor Sample</h3>
+    <p>This plot shows the copy number changes in the patient. Each dot represents a probeset and the values on the y-axis show the log2 transformed ratio of tumor vs normal. You can hover over the points to see what gene they represent. The plot on the bottom can be used to zoom in on certain regions.</p>    
+    <div class="row">
+        <div class="col-sm-6" style="width:900px">
+            <div id="copyNumber-tumor">
+                <script>
+                
+                d3.json("data/35392278-T.CN.json", function(error, json){
+                    if (error) return console.warn(error);
+                    dataset = json;
+                
+                    // this function determines the tick point locations    
+                    var chrTickPoints = [];
+                    var chrNames = [];
+                    var chrCurrent = dataset[0]["chr"];
+                    chrNames.push(chrCurrent);
+                    for( var i=0; i < dataset.length; i ++ ){
+                        if (dataset[i]["chr"] != chrCurrent){
+                            chrTickPoints.push(i);
+                            
+                            chrCurrent = dataset[i]["chr"];
+                            chrNames.push(chrCurrent);
+                        }
+                    }
+                    console.log(chrNames);        
+                    var margin = {top: 10, right:10, bottom: 50, left: 10},
+                        w=900 - margin.left -margin.right,
+                        h= 400 - margin.top - margin.bottom,
+                        padding = 20;
+                    
+                    var nData = dataset.length;
+                    var xScale = d3.scale.linear() //smae xScale can be used for both plots
+                            .domain([0, d3.max(dataset, function(d) {
+                                return d.x;
+                            })])
+                            .range([padding*2, w-padding])
+                            .clamp(true)
+                            .nice();
+                    
+                    var yScale = d3.scale.linear() // this is the yScale for the bigger plot
+                            .domain([d3.min(dataset, function(d){ return Number(d.lr)-1; }), d3.max(dataset, function(d){ return Number(d.lr)+1; })])
+                            .range([h-padding, padding])
+                            .clamp(true);
+                    
+                    var xAxis = d3.svg.axis()
+                            .scale(xScale)
+                            .orient("bottom")
+                    
+                    // this is where chr size proportional ticks and vertical lines are generated
+                    xAxis.tickValues(chrTickPoints)
+                        .tickSize((-h+padding*2), 4);    
+                        
+                    var yAxis = d3.svg.axis()
+                            .scale(yScale)
+                            .orient("left")
+                            .ticks(10)
+                            .tickSize((-w + padding*3),0);
+                        
+                    var yAxis2 = d3.svg.axis()
+                            .scale(yScale)
+                            .orient("left");
+                    
+                    yAxis2.tickValues([-1.5, 0, 1.5])
+                        .tickSize(4, w);
+                    
+                    var colorScale = function(x, i){
+                            if(x > i){
+                                return "red"
+                            }
+                            if(x < -i){
+                                return "red"
+                            }
+                            if(x > -i && x < i){
+                                return "steelblue"
+                            }
+                        }
+                    var colorThreshold = 1;
+                    // creating the tip box for the scatter plot
+                    var tip = d3.tip()
+                      .attr('class', 'd3-tip')
+                      .offset([-10, 0])
+                      .html(function(d) {
+                            return "<strong>Gene:</strong><span style='color:" + colorScale(d.lr, colorThreshold) + "'>" + d.gene + "</span></br><strong>Chr:</strong> <span style='color:" + colorScale(d.lr, colorThreshold) + "'>" + d.chr + "</span></br><strong>Region:</strong> <span style='color:" + colorScale(d.lr, colorThreshold) + "'>" + d.region + "</span></br><strong>Fold Change:</strong> <span style='color:" + colorScale(d.lr, colorThreshold) + "'>" + d.fc + "</span></br><strong>P-value:</strong> <span style='color:" + colorScale(d.lr, colorThreshold) + "'>" + d.pval + "</span>";
+                      })
+                    
+                    // this sets up the zoom event listener
+                    var zoom = d3.behavior.zoom()
+                        .x(xScale)
+                        //.y(yScale)
+                        .scaleExtent([1, 100])
+                        .on("zoom", zoomed);
+                
+                    // set up the chart area
+                    var svg =d3.select("#copyNumber-tumor").append("svg")
+                            .attr("width", w + margin.left + margin.right)
+                            .attr("height", h + margin.top + margin.bottom);
+                     
+                    svg.append("defs").append("clipPath")
+                        .attr("id", "chart-area")
+                        .append("rect")
+                        .attr("width", w)
+                        .attr("height", h);
+                    
+                    svg.call(tip);
+                    var colorCheck="red";
+                    console.log(colorCheck);
+                    //add the circles
+                    var circles1 = svg.append("g") //big plot
+                        .attr("id", "circles1")
+                        .attr("clip-path", "url(#chart-area)")
+                        .selectAll("circle")
+                        .data(dataset)
+                        .enter()
+                        .append("circle")
+                        .attr("fill", function(d){
+                            return colorScale(d.lr, colorThreshold);
+                        })
+                        // this changes the circle shape and color upon mouse over
+                        .on("mouseover", function(d){
+                            d3.select(this).attr("r", 5)
+                                            .attr("fill-opacity", .2)
+                                            .attr("stroke", "black");
+                        })
+                        .on('mouseover', tip.show)
+                        //this converts the circles back to their original size and color upon mouse out
+                        .on("mouseout", function() {
+                            circles1.attr("r", 2)
+                                .attr("fill", function(d){
+                                      return colorScale(d.lr, colorThreshold);
+                                })
+                                .attr("stroke", "none")
+                                .attr("fill-opacity", 1)   
+                        })
+                        .on('mouseout', tip.hide)
+                        .on("click", function(d){
+                            var gene = d.gene;
+                            if(colorCheck != "red"){
+                                console.log(colorCheck);
+                                colorCheck = "red";
+                                circles1.attr("fill", function(d){
+                                    return colorScale(d.lr, colorThreshold);
+                                })    
+                            }else{ 
+                                console.log(colorCheck);
+                                colorCheck = "blue";
+                                circles1.attr("fill", function(d){
+                                    if(d.gene == gene){
+                                        return "red" 
+                                    }else{
+                                        return "lightgrey"
+                                    }
+                                })
+                            }
+                        });
+                        
+                    circles1.attr("cx", function(d){
+                        return xScale(d.x);
+                    });
+                    
+                    circles1.attr("cy", function(d){
+                        return yScale(d.lr);
+                    });
+                    
+                    
+                    // add the title
+                    svg.append("text")
+                            .attr("x", (w / 2))             
+                            .attr("y", margin.top*2)
+                            .attr("text-anchor", "middle")  
+                            .style("font-size", "16px") 
+                            .style("text-decoration", "underline")  
+                            .text("TUMOR")
+                            .on("click", function(){
+                                svg.selectAll("circle")
+                                    .attr("fill", function(d){
+                                        return colorScale(d.lr, 2);
+                                    })   
+                            });
+                    
+                    // add the axes
+                    circles1.attr("r", 2);
+                        svg.append("g")
+                        .attr("class", "x axis")
+                        .attr("transform", "translate(0," + (h - padding) + ")")
+                        .call(xAxis);
+                    
+                    svg.append("g")
+                        .attr("class", "y axis")
+                        .attr("transform", "translate(" + padding*2 + ", 0)")
+                        .call(yAxis);
+                        //.call(yAxis2);
+                    
+                    // add the y axis label
+                    svg.append("text")
+                        .attr("class", "y label")
+                        .attr("text-anchor", "middle")
+                        .attr("x", -140)
+                        .attr("y", 6)   
+                        .attr("dy", ".75em")
+                        .attr("transform", "rotate(-90)")
+                        .attr("font-size", "20px")
+                        .text("Log2 Tumor/Normal ratio");
+                    
+                //    svg.append("text")
+                //        .attr("class",  "reset")
+                //        .attr("text-anchor", "middle")
+                //        .attr("x", w/2)
+                //        .attr("y", padding)
+                //        .text("Reset Colors")
+                //        .on("click", function)
+                    
+                    
+                    // the zoom function that redraws the x axis and the points
+                    function zoomed(){
+                        console.log(zoom.scale()); // this is to show the current zoom level. Might play with this later on.
+                        //console.log(zoom.translate())
+                        d3.select(".x.axis").call(xAxis)
+                       // d3.select(".y.axis").call(yAxis)
+                        svg.selectAll("circle")
+                            .attr("cx", function(d){
+                                return xScale(d.x);
+                            })
+                            .attr("cy", function(d){
+                                return yScale(d.lr);
+                            })
+                            .attr("r", function(d){
+                                if(zoom.scale() < 20 ){
+                                    return 2;
+                                }if(zoom.scale() >= 20 && zoom.scale() < 80){
+                                    return 3;
+                                }else{
+                                    return 4;
+                                }});
+                    };
+                     
+                    d3.select("#copyNumber-tumor").call(zoom);  
+                    // function to change fold change threshold
+                    d3.selectAll("input.fold-change").on("change", change);
+                    
+                    function change() {
+                        //clearTimeout(timeout);
+                        foldChange = this.value;
+                        var t0 = svg.transition().duration(750);
+                        t0.selectAll("circle")
+                            .attr("fill", function(d){
+                                        return colorScale(d.lr, foldChange);
+                                    }); 
+                      }
+                    
+                    // function to change exonic vs tiling probes
+                    d3.selectAll("input.probes").on("change", change2);
+                   
+                    function change2() {
+                        //clearTimeout(timeout);
+                        type = this.value;
+                        
+                        var t0 = svg.transition().duration(750);
+                        if(type == "tiling"){
+                            t0.selectAll("circle")
+                                .style("display", function(d){
+                                    if(d.type == "Gene"){
+                                        return "none";
+                                    }
+                                })
+                            .attr("fill", function(d){
+                                    return colorScale(d.lr, colorThreshold);
+                                });
+                        }
+                        if(type == "exonic"){
+                            t0.selectAll("circle")
+                                .style("display", function(d){
+                                    if(d.type == "Tiling"){
+                                        return "none";
+                                    }
+                                })
+                            .attr("fill", function(d){
+                                    return colorScale(d.lr, colorThreshold);
+                                });
+                        }
+                        if(type == "intragenic"){
+                            t0.selectAll("circle")
+                                .attr("fill", function(d){
+                                    if(d.sigIntragenic == 0){
+                                        return "#F8F8F8";
+                                    }if(d.sigIntragenic == 1){
+                                        return "green";
+                                    }if(d.sigIntragenic == 2){
+                                        return "orange";   
+                                    }
+                                })
+                                .style("display", "inherit");
+                        }
+                        if(type == "All"){
+                            t0.selectAll("circle")
+                                .style("display", "inherit")
+                                .attr("fill", function(d){
+                                    return colorScale(d.lr, colorThreshold);
+                                })
+                                
+                        }
+                        
+                    };
+                    
+                    
+                    // function to change fold change threshold
+                    d3.selectAll("input.yaxis").on("change", change3);
+                    
+                    function change3() {
+                        //clearTimeout(timeout);
+                        axisType = this.value;
+                        // First transition the line & label to the new city.
+                        var t0 = svg.transition().duration(500);
+                        if(axisType == "fc"){
+                        var yScale = d3.scale.linear() // this is the yScale for the bigger plot
+                            .domain([d3.min(dataset, function(d){ return Number(d.fc)-1; }), d3.max(dataset, function(d){ return Number(d.fc)+1; })])
+                            .range([h-padding, padding])
+                            .clamp(true);
+                         t0.select(".y.axis").call(yAxis)  ;
+                         t0.selectAll("circle")
+                            .attr("cy", function(d){
+                                return yScale(d.fc);
+                            });
+                        }else{
+                            t0.selectAll("circle")
+                            .attr("cy", function(d){
+                                return yScale(d.lr);
+                            });
+                        }
+                      }
+                });
+                
+                </script>
+                <!--<script type="text/javascript" src="js/copyNumber.js"></script> -->
+            </div>
+        </div>
+        <!-- This sectio contains the legends and selectors for the copy number plot-->
+        <div class="col-lg-4">
+            <div id="copyNumber-legend">
+            <h5>Please choose the log2 ratio threshold you would like to visualize:</h5>
+            <form>
+                <input type=radio class="fold-change" name="fc" value="1" id="one" checked><label for="one">1 (FC:2)</label><br/>
+                <input type=radio class="fold-change" name="fc" value="1.5" id="onehalf"><label for="onehalf" >1.5 (FC:2.83)</label><br/>
+                <input type=radio class="fold-change" name="fc" value="2" id="two"><label for="two" >2 (FC:4)</label><br/>
+            </form>
+             <h5> Please choose the kind of probes you would like to view:</h5>
+            <form>
+                <label><input type=radio class="probes" name="fc" value="All" checked>All</label><br/>
+                <label><input type=radio class="probes" name="fc" value="exonic">Exonic probes</label><br/>
+                <label><input type=radio class="probes" name="fc" value="tiling">Tiling probes</label><br/>
+                <label><input type=radio class="probes" name="fc" value="intragenic">Intragenic deletion events</label><br/>
+            </form>
+            
+            </div>   
+        </div>
+    </div>
